@@ -1363,19 +1363,10 @@ bool SatGen::importCell(RTLIL::Cell *cell, int timestep)
 		return true;
 	}
 
-	if (cell->type == ID($assert))
+	// Don't do anything with these cells here, use importPropertyCell to add
+	// when desired
+	if (cell->type.in(ID($assert), ID($assume), ID($cover)))
 	{
-		std::string pf = prefix + (timestep == -1 ? "" : stringf("@%d:", timestep));
-		asserts_a[pf].append((*sigmap)(cell->getPort(ID::A)));
-		asserts_en[pf].append((*sigmap)(cell->getPort(ID::EN)));
-		return true;
-	}
-
-	if (cell->type == ID($assume))
-	{
-		std::string pf = prefix + (timestep == -1 ? "" : stringf("@%d:", timestep));
-		assumes_a[pf].append((*sigmap)(cell->getPort(ID::A)));
-		assumes_en[pf].append((*sigmap)(cell->getPort(ID::EN)));
 		return true;
 	}
 

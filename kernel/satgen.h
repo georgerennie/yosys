@@ -67,8 +67,6 @@ struct SatGen
 	SigMap *sigmap;
 	std::string prefix;
 	SigPool initial_state;
-	std::map<std::string, RTLIL::SigSpec> asserts_a, asserts_en;
-	std::map<std::string, RTLIL::SigSpec> assumes_a, assumes_en;
 	std::map<std::string, std::map<RTLIL::SigBit, int>> imported_signals;
 	std::map<std::pair<std::string, int>, bool> initstates;
 	bool ignore_div_by_zero;
@@ -157,46 +155,27 @@ struct SatGen
 		return imported_signals[pf].count(bit) != 0;
 	}
 
-	void getAsserts(RTLIL::SigSpec &sig_a, RTLIL::SigSpec &sig_en, int timestep = -1)
-	{
-		std::string pf = prefix + (timestep == -1 ? "" : stringf("@%d:", timestep));
-		sig_a = asserts_a[pf];
-		sig_en = asserts_en[pf];
-	}
+	// Used for importing assert/assume/cover
+	int importPropertyCell(RTLIL::Cell* cell, int timestep = -1) {
+		log_assert(cell->type.in(ID($assert), ID($assume), ID($cover)));
 
-	void getAssumes(RTLIL::SigSpec &sig_a, RTLIL::SigSpec &sig_en, int timestep = -1)
-	{
-		std::string pf = prefix + (timestep == -1 ? "" : stringf("@%d:", timestep));
-		sig_a = assumes_a[pf];
-		sig_en = assumes_en[pf];
-	}
+		const auto check_sig = (*sigmap)(cell->getPort(ID::A)), en_sig = (*sigmap)(cell->getPort(ID::EN));
+		log_assert(check_sig.is_bit());
+		log_assert(en_sig.is_bit());
 
-	int importAsserts(int timestep = -1)
-	{
-		std::vector<int> check_bits, enable_bits;
-		std::string pf = prefix + (timestep == -1 ? "" : stringf("@%d:", timestep));
+		int check_bit = importDefSigSpec(check_sig, timestep).front();
+		int enable_bit = importDefSigSpec(en_sig, timestep).front();
 		if (model_undef) {
-			check_bits = ez->vec_and(ez->vec_not(importUndefSigSpec(asserts_a[pf], timestep)), importDefSigSpec(asserts_a[pf], timestep));
-			enable_bits = ez->vec_and(ez->vec_not(importUndefSigSpec(asserts_en[pf], timestep)), importDefSigSpec(asserts_en[pf], timestep));
-		} else {
-			check_bits = importDefSigSpec(asserts_a[pf], timestep);
-			enable_bits = importDefSigSpec(asserts_en[pf], timestep);
+			check_bit = ez->AND(ez->NOT(importUndefSigSpec(check_sig, timestep).front()), check_bit);
+			enable_bit = ez->AND(ez->NOT(importUndefSigSpec(en_sig, timestep).front()), enable_bit);
 		}
-		return ez->vec_reduce_and(ez->vec_or(check_bits, ez->vec_not(enable_bits)));
-	}
 
-	int importAssumes(int timestep = -1)
-	{
-		std::vector<int> check_bits, enable_bits;
-		std::string pf = prefix + (timestep == -1 ? "" : stringf("@%d:", timestep));
-		if (model_undef) {
-			check_bits = ez->vec_and(ez->vec_not(importUndefSigSpec(assumes_a[pf], timestep)), importDefSigSpec(assumes_a[pf], timestep));
-			enable_bits = ez->vec_and(ez->vec_not(importUndefSigSpec(assumes_en[pf], timestep)), importDefSigSpec(assumes_en[pf], timestep));
-		} else {
-			check_bits = importDefSigSpec(assumes_a[pf], timestep);
-			enable_bits = importDefSigSpec(assumes_en[pf], timestep);
-		}
-		return ez->vec_reduce_and(ez->vec_or(check_bits, ez->vec_not(enable_bits)));
+		// For covers we want to see enable and check at the same time
+		if (cell->type == ID($cover))
+			return ez->AND(check_bit, enable_bit);
+
+		// For assert/assume, the property under consideration is en -> check
+		return ez->OR(ez->NOT(enable_bit), check_bit);
 	}
 
 	int signals_eq(RTLIL::SigSpec lhs, RTLIL::SigSpec rhs, int timestep_lhs = -1, int timestep_rhs = -1)
