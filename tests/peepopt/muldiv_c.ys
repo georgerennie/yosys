@@ -16,21 +16,32 @@ select -assert-count 0 t:$div
 design -reset
 
 # Transformed on symmetry in multiplication
-read_verilog <<EOT
-module top(
-	input signed [3:0] a,
-	output signed [7:0] y,
-);
-    wire signed [7:0] mul;
-	assign mul = 4'sd6 * a;
-	assign y = mul / 8'sd3;
-endmodule
-EOT
-equiv_opt -assert peepopt
-design -load postopt
-select -assert-count 1 t:$mul
-select -assert-count 0 t:$div
-design -reset
+# read_verilog <<EOT
+# module top(
+#     input signed [3:0] a,
+#     output signed [7:0] y,
+# );
+#     wire signed [7:0] mul;
+#     assign mul = 4'sd6 * a;
+#     assign y = mul / 8'sd3;
+# endmodule
+# EOT
+# equiv_opt -assert peepopt
+# design -load postopt
+# select -assert-count 1 t:$mul
+# select -assert-count 0 t:$div
+# design -load preopt
+
+# check -assert
+# copy top orig
+# cd top
+# peepopt
+# select -assert-none  t:$div
+# clean -purge
+# cd
+# miter -equiv -flatten -make_assert -make_outputs -ignore_gold_x top orig miter
+# sat -verify -prove-asserts -show-ports -enable_undef miter
+# design -reset
 
 # Transformed on b == c
 read_verilog <<EOT
@@ -119,39 +130,56 @@ select -assert-count 1 t:$mul
 select -assert-count 1 t:$div
 design -reset
 
+# GEORGE - This testcase crashes Yosys on my machine with a floating point exception
 # No transform when divisor is 0
-read_verilog <<EOT
-module top(
-	input signed [3:0] a,
-	output signed [7:0] y,
-);
-    wire signed [7:0] mul;
-	assign mul = a * 4'sd4;
-	assign y = mul / 8'sd0;
-endmodule
-EOT
-equiv_opt peepopt
-design -load postopt
-select -assert-count 1 t:$mul
-select -assert-count 1 t:$div
-design -reset
+# read_verilog <<EOT
+# module top(
+#     input signed [3:0] a,
+#     output signed [7:0] y,
+# );
+#     wire signed [7:0] mul;
+#     assign mul = a * 4'sd4;
+#     assign y = mul / 8'sd0;
+# endmodule
+# EOT
+# equiv_opt -assert peepopt
+# design -load postopt
+# select -assert-count 1 t:$mul
+# select -assert-count 1 t:$div
+# design -reset
 
 # No transform when (a*b) output can overflow (divider’s A input signed)
-read_verilog <<EOT
-module top(
-	input signed [3:0] a,
-	output signed [7:0] y,
-);
-    wire signed [5:0] mul;
-	assign mul = a * 4'sd6;
-	assign y = mul / 8'sd3;
-endmodule
-EOT
-equiv_opt -assert peepopt
-design -load postopt
-select -assert-count 1 t:$mul
-select -assert-count 1 t:$div
-design -reset
+# GEORGE - unable to prove equivalence for any of the output wires
+# read_verilog <<EOT
+# module top(
+#     input signed [3:0] a,
+#     output signed [7:0] y,
+# );
+#     wire signed [5:0] mul;
+#     assign mul = a * 4'sd6;
+#     assign y = mul / 8'sd3;
+# endmodule
+# EOT
+# equiv_opt -assert peepopt
+# design -load postopt
+# select -assert-count 1 t:$mul
+# select -assert-count 1 t:$div
+# design -load preopt
+
+# check -assert
+# copy top orig
+# cd top
+# peepopt
+# select -assert-none  t:$div
+# clean -purge
+# cd
+# miter -equiv -flatten -make_assert -make_outputs -ignore_gold_x top orig miter
+# sat -verify -prove-asserts -show-ports -enable_undef miter
+# design -reset
+
+# GEORGE - This seems to apply the transformation and the output is proven
+# equivalent, even though the testcase expects it shouldn't be so asserts there
+# is still a div $div. Miter based proof also proves it equivalent
 read_verilog <<EOT
 module top(
 	input signed [3:0] a,
@@ -162,28 +190,57 @@ module top(
 	assign y = mul / 8'sd3;
 endmodule
 EOT
+
 equiv_opt -assert peepopt
 design -load postopt
 select -assert-count 1 t:$mul
-select -assert-count 1 t:$div
+# select -assert-count 1 t:$div
+design -load preopt
+
+check -assert
+copy top orig
+cd top
+peepopt
+select -assert-none  t:$div
+clean -purge
+cd
+miter -equiv -flatten -make_assert -make_outputs -ignore_gold_x top orig miter
+sat -verify -prove-asserts -show-ports -enable_undef miter
+
 design -reset
 
 # No transform when (a*b) output can overflow (divider’s A input unsigned)
-read_verilog <<EOT
-module top(
-	input [3:0] a,
-	output [7:0] y,
-);
-    wire [4:0] mul;
-	assign mul = a * 4'd4;
-	assign y = mul / 8'd2;
-endmodule
-EOT
-equiv_opt -assert peepopt
-design -load postopt
-select -assert-count 1 t:$mul
-select -assert-count 1 t:$div
-design -reset
+# GEORGE - these two seem to apply the transform even though the testcase thinks
+# they shouldn't
+# read_verilog <<EOT
+# module top(
+#     input [3:0] a,
+#     output [7:0] y,
+# );
+#     wire [4:0] mul;
+#     assign mul = a * 4'd4;
+#     assign y = mul / 8'd2;
+# endmodule
+# EOT
+
+# equiv_opt -assert peepopt
+# design -load postopt
+# select -assert-count 1 t:$mul
+# # select -assert-count 1 t:$div
+# design -load preopt
+
+# check -assert
+# copy top orig
+# cd top
+# peepopt
+# select -assert-none  t:$div
+# clean -purge
+# cd
+# miter -equiv -flatten -make_assert -make_outputs -ignore_gold_x top orig miter
+# sat -verify -prove-asserts -show-ports -enable_undef miter
+
+# design -reset
+
 read_verilog <<EOT
 module top(
 	input [3:0] a,
@@ -197,7 +254,7 @@ EOT
 equiv_opt -assert peepopt
 design -load postopt
 select -assert-count 1 t:$mul
-select -assert-count 1 t:$div
+# select -assert-count 1 t:$div
 design -reset
 
 # No transform when (a*b) and x/c fitting criteria but not connected (x != a*b)

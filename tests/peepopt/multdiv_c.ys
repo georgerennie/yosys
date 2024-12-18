@@ -1,6 +1,5 @@
 log -header "Test simple positive case"
 log -push
-design -reset
 read_verilog <<EOF
 module top (
   input wire  [31:0] a,
@@ -9,18 +8,12 @@ module top (
   assign y = (a * 5140) / (257 * 2);
 endmodule
 EOF
-check -assert
-copy top orig
-cd top
-peepopt
-select -assert-none  t:$div
-clean -purge
-cd
-miter -equiv -flatten -make_assert -make_outputs -ignore_gold_x top orig miter
-sat -verify -prove-asserts -show-ports -enable_undef miter
-
-
+equiv_opt -assert peepopt
+design -load postopt
+select -assert-none t:$div
+design -reset
 log -pop
+
 log -header "Test negative case where div is kept"
 log -push
 design -reset
@@ -36,14 +29,8 @@ module top (
   assign y = tmp[43:0] / (257 * 2);
 endmodule
 EOF
-check -assert
-copy top orig
-cd top
-peepopt
-select -assert-any t:$div
-clean -purge
-cd
-miter -equiv -flatten -make_assert -make_outputs -ignore_gold_x top orig miter
-sat -verify -prove-asserts -show-ports -enable_undef miter
-
-
+equiv_opt -assert peepopt
+design -load postopt
+select -assert-count 1 t:$div
+design -reset
+log -pop
